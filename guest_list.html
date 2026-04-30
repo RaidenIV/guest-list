@@ -1,0 +1,1686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Guest List Generator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: 'Inter', sans-serif;
+    background: #f5f5f5;
+    color: #1a1a1a;
+    min-height: 100vh;
+}
+
+/* ── SITE NAV MENU ───────────────────────────────── */
+.nav-dropdown {
+    position: fixed;
+    top: 18px;
+    left: 18px;
+    z-index: 3000;
+}
+.nav-toggle {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 10px;
+    border: 1px solid #d0d0d0;
+    background: #fff;
+    color: #1a1a1a;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.nav-toggle:hover { background: #f0f0f0; border-color: #aaa; }
+.nav-toggle-icon {
+    position: relative;
+    width: 18px;
+    height: 2px;
+    background: currentColor;
+    border-radius: 2px;
+    transition: 0.2s;
+}
+.nav-toggle-icon::before,
+.nav-toggle-icon::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    width: 18px;
+    height: 2px;
+    background: currentColor;
+    border-radius: 2px;
+    transition: 0.2s;
+}
+.nav-toggle-icon::before { top: -6px; }
+.nav-toggle-icon::after { top: 6px; }
+.nav-dropdown.active .nav-toggle-icon { background: transparent; }
+.nav-dropdown.active .nav-toggle-icon::before { top: 0; transform: rotate(45deg); }
+.nav-dropdown.active .nav-toggle-icon::after { top: 0; transform: rotate(-45deg); }
+.nav-menu {
+    position: absolute;
+    top: 52px;
+    left: 0;
+    min-width: 190px;
+    padding: 6px;
+    border: 1px solid #d0d0d0;
+    border-radius: 10px;
+    background: #fff;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-6px);
+    transition: opacity 0.16s ease, visibility 0.16s ease, transform 0.16s ease;
+}
+.nav-dropdown.active .nav-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+.nav-menu a {
+    display: block;
+    padding: 10px 12px;
+    color: #555;
+    text-decoration: none;
+    border-radius: 7px;
+    font-size: 14px;
+    font-weight: 700;
+    transition: background 0.15s, color 0.15s;
+}
+.nav-menu a:hover { background: #f0f0f0; color: #1a1a1a; }
+body.dark .nav-toggle,
+body.dark .nav-menu {
+    background: #161b22;
+    border-color: #30363d;
+    color: #e6edf3;
+}
+body.dark .nav-toggle:hover,
+body.dark .nav-menu a:hover { background: #21262d; }
+body.dark .nav-menu a { color: #c9d1d9; }
+body.dark .nav-menu a:hover { color: #58a6ff; }
+
+/* ── HEADER ─────────────────────────────────────── */
+.header {
+    background: #fff;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 14px 28px 14px 84px;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+}
+.header img {
+    height: 66px;
+    width: auto;
+    justify-self: start;
+}
+.header h1 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 48px;
+    font-weight: 700;
+    color: #1a1a1a;
+    letter-spacing: 0.02em;
+    text-align: center;
+}
+.header-spacer {
+    justify-self: end;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ── ICON BUTTONS (help + dark mode) ──────────────────────── */
+.btn-icon {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 50%;
+    background: transparent;
+    border: 1px solid #d0d0d0;
+    color: #555;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    font-family: inherit;
+    font-weight: 700;
+}
+.btn-icon:hover { background: #f0f0f0; border-color: #aaa; }
+
+/* ── MODAL ─────────────────────────────────────────────────── */
+.modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+}
+.modal-backdrop.open { display: flex; }
+.modal {
+    background: #fff;
+    border-radius: 10px;
+    padding: 32px;
+    max-width: 560px;
+    width: calc(100% - 40px);
+    max-height: 80vh;
+    overflow-y: auto;
+    position: relative;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.2);
+}
+.modal h3 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 18px;
+    color: #1a1a1a;
+}
+.modal-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    font-size: 18px;
+    cursor: pointer;
+    color: #888;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    padding: 0;
+    font-family: inherit;
+}
+.modal-close:hover { background: #f0f0f0; color: #333; }
+.guide-section {
+    margin-bottom: 18px;
+}
+.guide-section h4 {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #888;
+    margin-bottom: 6px;
+}
+.guide-section p, .guide-section li {
+    font-size: 14px;
+    line-height: 1.6;
+    color: #333;
+}
+.guide-section ul {
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* ── DARK MODE ─────────────────────────────────────────────── */
+body.dark {
+    background: #0d1117;
+    color: #e6edf3;
+}
+body.dark .header {
+    background: #161b22;
+    border-color: #30363d;
+}
+body.dark .header h1 { color: #e6edf3; }
+body.dark .btn-icon { border-color: #30363d; color: #8b949e; }
+body.dark .btn-icon:hover { background: #21262d; border-color: #484f58; }
+body.dark .left-panel {
+    background: #161b22;
+    border-color: #30363d;
+}
+body.dark .left-col { border-color: #21262d; }
+body.dark .group-label { color: #8b949e; border-color: #21262d; }
+body.dark label { color: #8b949e; }
+body.dark input[type="text"],
+body.dark input[type="date"],
+body.dark input[type="number"],
+body.dark textarea,
+body.dark select {
+    background: #0d1117;
+    border-color: #30363d;
+    color: #e6edf3;
+    color-scheme: dark;
+}
+body.dark input:focus,
+body.dark textarea:focus,
+body.dark select:focus {
+    border-color: #58a6ff;
+    box-shadow: 0 0 0 3px rgba(88,166,255,0.1);
+}
+body.dark .dj-block,
+body.dark .other-block {
+    background: #0d1117;
+    border-color: #30363d;
+}
+body.dark .drag { color: #484f58; }
+body.dark .dj-member-heading { color: #8b949e; }
+body.dark .preview-header {
+    background: #161b22;
+    border-color: #30363d;
+}
+body.dark .preview-header h2 { color: #8b949e; }
+body.dark .preview-scroll { background: #0d1117; }
+body.dark .right-panel { background: #0d1117; }
+body.dark .btn-primary { background: #238636; border-color: #238636; }
+body.dark .btn-primary:hover { background: #2ea043; border-color: #2ea043; }
+body.dark .btn-secondary { background: #21262d; color: #e6edf3; border-color: #30363d; }
+body.dark .btn-secondary:hover { background: #30363d; }
+body.dark .btn-danger { background: #21262d; color: #f85149; border-color: #3d1f1f; }
+body.dark .btn-danger:hover { background: #2d1f1f; }
+body.dark .modal { background: #161b22; }
+body.dark .modal h3 { color: #e6edf3; }
+body.dark .modal-close { color: #8b949e; }
+body.dark .modal-close:hover { background: #21262d; color: #e6edf3; }
+body.dark .guide-section h4 { color: #8b949e; }
+body.dark .guide-section p,
+body.dark .guide-section li { color: #c9d1d9; }
+body.dark ::-webkit-scrollbar-thumb { background: #30363d; }
+body.dark ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+body.dark .backend-select { background: #0d1117; color: #e6edf3; border-color: #30363d; }
+body.dark .status-dialog { background: #161b22; border-color: #30363d; color: #e6edf3; }
+body.dark .status-dialog-message { color: #c9d1d9; }
+
+/* ── BACKEND STATUS + SAVED LIST CONTROLS ───────── */
+.backend-select {
+    min-width: 210px;
+    max-width: 260px;
+    background: #fff;
+    border: 1px solid #d0d0d0;
+    border-radius: 6px;
+    color: #1a1a1a;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 9px 10px;
+}
+.status-dialog {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 4000;
+    width: min(360px, calc(100vw - 32px));
+    padding: 14px 16px;
+    border-radius: 10px;
+    border: 1px solid #d0d0d0;
+    background: #fff;
+    color: #1a1a1a;
+    display: none;
+}
+.status-dialog.open { display: block; }
+.status-dialog-title {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+.status-dialog-message {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: #555;
+}
+.status-dialog.success { border-left: 4px solid #238636; }
+.status-dialog.error { border-left: 4px solid #c0392b; }
+.status-dialog.info { border-left: 4px solid #58a6ff; }
+.status-dialog.warning { border-left: 4px solid #d29922; }
+
+/* ── MAIN 2-COLUMN LAYOUT ────────────────────────── */
+.main {
+    display: grid;
+    grid-template-columns: 780px 1fr;
+    height: calc(100vh - 73px);
+}
+
+/* ── LEFT PANEL (inputs) ─────────────────────────── */
+.left-panel {
+    background: #fff;
+    border-right: 1px solid #e0e0e0;
+    overflow-y: auto;
+}
+
+.left-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+}
+
+.left-col {
+    border-right: 1px solid #f0f0f0;
+}
+.left-col:last-child { border-right: none; }
+
+/* ── RIGHT PANEL (preview) ───────────────────────── */
+.right-panel {
+    display: flex;
+    flex-direction: column;
+    background: #f5f5f5;
+    overflow: hidden;
+}
+
+.preview-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: #fff;
+    border-bottom: 1px solid #e0e0e0;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+.preview-header h2 {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #888;
+    margin-right: 8px;
+}
+.page-warning {
+    font-size: 13px;
+    font-weight: 700;
+    color: #c0392b;
+    display: none;
+}
+.page-warning.visible { display: block; }
+
+.preview-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    background: #e8e8e8;
+}
+
+/* Each page is a fixed-ratio letter sheet (8.5x11 → ratio 1:1.294) */
+.page-sheet {
+    /* Fixed width in px; height derived from letter ratio */
+    width: 520px;
+    min-height: 672px; /* 520 * 11/8.5 */
+    background: #fff;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+    border-radius: 2px;
+    padding: 36px 40px 40px;
+    flex-shrink: 0;
+    position: relative;
+    font-size: 11px;
+    line-height: 1.45;
+    color: #111;
+    box-sizing: border-box;
+}
+
+/* The <details> wraps each sheet — hide the summary arrow neatly */
+.page-block {
+    width: 520px;
+    flex-shrink: 0;
+}
+.page-block > summary {
+    font-size: 11px;
+    font-weight: 700;
+    color: #888;
+    cursor: pointer;
+    margin-bottom: 6px;
+    list-style: none;
+    outline: none;
+    text-align: center;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.page-block > summary::-webkit-details-marker { display: none; }
+
+#preview { display: contents; }
+#preview .section-title { font-weight: 700; margin-bottom: 2px; font-size: 11px; }
+#preview .dup { font-weight: 800; color: #c0392b; }
+#preview .page-number { text-align: center; margin-top: 10px; font-size: 10px; color: #aaa; }
+#preview .col-layout { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
+#preview .col-section { white-space: pre-wrap; word-break: break-word; font-size: 10.5px; }
+#preview hr { border: none; border-top: 1px dashed #ddd; margin: 0; }
+
+
+
+/* ── SECTION GROUPS ──────────────────────────────── */
+.group-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #888;
+    padding: 12px 20px 6px;
+    border-top: 1px solid #f0f0f0;
+}
+.group-label:first-child { border-top: none; padding-top: 16px; }
+
+.group-body {
+    padding: 4px 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* ── FORM ELEMENTS ───────────────────────────────── */
+label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: #555;
+    margin-bottom: 4px;
+    letter-spacing: 0.02em;
+}
+
+input[type="text"],
+input[type="date"],
+input[type="number"],
+textarea,
+select {
+    width: 100%;
+    background: #fff;
+    border: 1px solid #d8d8d8;
+    border-radius: 6px;
+    color: #1a1a1a;
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    padding: 7px 10px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    outline: none;
+}
+input[type="text"]:focus,
+input[type="date"]:focus,
+input[type="number"]:focus,
+textarea:focus,
+select:focus {
+    border-color: #aaa;
+    box-shadow: 0 0 0 3px rgba(0,0,0,0.05);
+}
+textarea {
+    resize: vertical;
+    min-height: 76px;
+    line-height: 1.5;
+}
+input[type="number"] { width: 72px; }
+
+/* ── ROW HELPER ──────────────────────────────────── */
+.row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+.row-count {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.row-count label {
+    margin: 0;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 700;
+    color: #333;
+}
+
+/* ── DJ / OTHER BLOCKS ───────────────────────────── */
+.dj-block, .other-block {
+    background: #fafafa;
+    border: 1px solid #e4e4e4;
+    border-radius: 6px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.drag {
+    font-size: 11px;
+    font-weight: 700;
+    color: #bbb;
+    cursor: grab;
+    user-select: none;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.dj-member-heading {
+    font-size: 11px;
+    font-weight: 700;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding-top: 4px;
+}
+.dj-member-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+/* ── BUTTONS ─────────────────────────────────────── */
+button {
+    font-family: 'Inter', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.03em;
+    padding: 9px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background 0.15s, box-shadow 0.15s;
+    white-space: nowrap;
+}
+.btn-primary {
+    background: #1a1a1a;
+    color: #fff;
+    border-color: #1a1a1a;
+}
+.btn-primary:hover { background: #333; border-color: #333; }
+
+.btn-secondary {
+    background: #fff;
+    color: #1a1a1a;
+    border-color: #d0d0d0;
+}
+.btn-secondary:hover { background: #f5f5f5; }
+
+.btn-danger {
+    background: #fff;
+    color: #c0392b;
+    border-color: #e8c4c0;
+}
+.btn-danger:hover { background: #fdf3f2; }
+
+/* ── DROP ZONE ───────────────────────────────────── */
+.right-panel.dragover { outline: 2px dashed #888; outline-offset: -4px; }
+.drop-hint {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.85);
+    font-size: 18px;
+    font-weight: 700;
+    color: #555;
+    pointer-events: none;
+    z-index: 100;
+}
+.right-panel.dragover .drop-hint { display: flex; }
+
+/* ── SCROLLBAR ───────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #bbb; }
+
+/* ── RESPONSIVE ──────────────────────────────────── */
+@media (max-width: 1100px) {
+    .main { grid-template-columns: 1fr; height: auto; }
+    .left-panel { overflow-y: visible; border-right: none; border-bottom: 1px solid #e0e0e0; }
+    .right-panel { min-height: 640px; }
+    .preview-header { align-items: stretch; }
+    .preview-header h2 { width: 100%; margin-right: 0; }
+    .backend-select { flex: 1 1 220px; max-width: none; }
+}
+@media (max-width: 760px) {
+    .header {
+        padding: 76px 16px 16px;
+        grid-template-columns: 1fr;
+        gap: 10px;
+        text-align: center;
+    }
+    .header img { justify-self: center; height: 52px; }
+    .header h1 { font-size: clamp(26px, 8vw, 38px); }
+    .header-spacer { justify-self: center; }
+    .left-grid { grid-template-columns: 1fr; }
+    .left-col { border-right: none; border-bottom: 1px solid #f0f0f0; }
+    .row { grid-template-columns: 1fr; }
+    .preview-header { padding: 10px; }
+    .preview-header button,
+    .preview-header select { width: 100%; }
+    .preview-scroll { padding: 16px 10px; align-items: stretch; }
+    .page-block,
+    .page-sheet { width: 100%; }
+    .page-sheet { min-height: 0; padding: 28px 24px 34px; overflow-x: auto; }
+    #preview .col-layout { grid-template-columns: 1fr; gap: 14px; }
+    .status-dialog { right: 12px; bottom: 12px; width: calc(100vw - 24px); }
+}
+
+</style>
+</head>
+<body>
+
+<!-- Navigation Dropdown -->
+<div class="nav-dropdown" id="navDropdown">
+    <button class="nav-toggle" id="navToggle" type="button" aria-label="Menu">
+        <span class="nav-toggle-icon" aria-hidden="true"></span>
+    </button>
+    <div class="nav-menu" role="menu" aria-label="Site navigation">
+        <a href="https://www.xodiamediagroup.com/" target="_top" rel="noopener">Home</a>
+        <a href="https://www.xodiamediagroup.com/upcoming-events" target="_top" rel="noopener">Upcoming Events</a>
+        <a href="https://www.xodiamediagroup.com/contact" target="_top" rel="noopener">Contact Us</a>
+        <a href="https://www.xodiamediagroup.com/tools" target="_top" rel="noopener">Tools</a>
+    </div>
+</div>
+
+<header class="header">
+    <img id="headerLogo" src="https://images.squarespace-cdn.com/content/v1/681ea18dd168a935c26295bd/7803d573-dd87-40ed-9570-0bc7c5ed8915/xodia_logo_black.png?format=750w" alt="XODIA Logo">
+    <h1>Guest List Generator</h1>
+    <div class="header-spacer">
+        <button class="btn-icon" onclick="toggleDark()" id="darkBtn" title="Toggle dark mode">🌙</button>
+        <button class="btn-icon" onclick="openHelp()" title="How to use">?</button>
+    </div>
+</header>
+
+<!-- ── HELP MODAL ── -->
+<div class="modal-backdrop" id="helpModal" onclick="closeHelpOutside(event)">
+    <div class="modal">
+        <button class="modal-close" onclick="closeHelp()">✕</button>
+        <h3>How to Use the Guest List Generator</h3>
+
+        <div class="guide-section">
+            <h4>Show Details</h4>
+            <p>Fill in the show name, headliner, direct support, date, and day-of-show ticket pricing. The show name and artist names are auto-capitalized when you leave the field.</p>
+        </div>
+
+        <div class="guide-section">
+            <h4>Guest Lists</h4>
+            <p>Enter one name per line in each guest list box. Names are automatically sorted alphabetically and capitalized. Duplicates across any list are flagged in red.</p>
+            <ul>
+                <li><strong>Headliner / Direct Support</strong> — artist guest lists</li>
+                <li><strong>XODIA</strong> — house / company guests</li>
+                <li><strong>Free Spots</strong> — comps, sponsors, etc.</li>
+                <li><strong>Promo Team</strong> — promotional staff</li>
+            </ul>
+        </div>
+
+        <div class="guide-section">
+            <h4>DJs</h4>
+            <p>Set how many DJs are performing. For each DJ, choose Solo / Duo / Trio and enter their stage name(s) and legal name(s). DJ blocks can be dragged to reorder them. Each DJ has their own guest list.</p>
+        </div>
+
+        <div class="guide-section">
+            <h4>Other Sections</h4>
+            <p>Add any custom sections (e.g. VIP, Press, Venue Staff). Name the section and add guests one per line. Sections can be dragged to reorder.</p>
+        </div>
+
+        <div class="guide-section">
+            <h4>Preview</h4>
+            <p>The right panel shows a live scaled preview of the PDF output. If the list spans multiple pages, each page appears as a separate sheet. A warning appears if the PDF will be more than one page.</p>
+        </div>
+
+        <div class="guide-section">
+            <h4>Buttons</h4>
+            <ul>
+                <li><strong>Export PDF</strong> — download a print-ready PDF</li>
+                <li><strong>Copy</strong> — copy the full list as plain text</li>
+                <li><strong>Save</strong> — save your work as a JSON file</li>
+                <li><strong>Load</strong> — load a previously saved JSON file</li>
+                <li><strong>Reset</strong> — clear all fields (asks for confirmation)</li>
+            </ul>
+        </div>
+
+        <div class="guide-section">
+            <h4>Import by Drag &amp; Drop</h4>
+            <p>Drag a saved JSON file from your computer and drop it anywhere on the preview panel to import it instantly.</p>
+        </div>
+    </div>
+</div>
+
+<!-- ── STATUS DIALOG ── -->
+<div id="statusDialog" class="status-dialog info" role="status" aria-live="polite">
+    <div id="statusDialogTitle" class="status-dialog-title">Status</div>
+    <div id="statusDialogMessage" class="status-dialog-message">Ready.</div>
+</div>
+
+<div class="main">
+
+    <!-- ── LEFT: INPUTS ── -->
+    <div class="left-panel">
+        <div class="left-grid">
+
+            <!-- ── LEFT COL 1: Show Details + DJs ── -->
+            <div class="left-col">
+
+                <div class="group-label">Show Details</div>
+                <div class="group-body">
+                    <div>
+                        <label>Show Name</label>
+                        <input id="showName" type="text">
+                    </div>
+                    <div>
+                        <label>Headliner</label>
+                        <input id="headliner" type="text">
+                    </div>
+                    <div>
+                        <label>Direct Support</label>
+                        <input id="directSupport" type="text">
+                    </div>
+                    <div class="row">
+                        <div>
+                            <label>Date</label>
+                            <input id="date" type="date">
+                        </div>
+                        <div>
+                            <label>Day of Show Pricing</label>
+                            <textarea id="dayOfShowPricing" placeholder="e.g. $20 presale&#10;$25 at door" style="min-height:60px;"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="group-label">DJs</div>
+                <div class="group-body">
+                    <div class="row-count">
+                        <label>How many DJs?</label>
+                        <input id="djCount" type="number" min="1" max="10" value="1">
+                    </div>
+                    <div id="djContainer"></div>
+                </div>
+
+            </div>
+
+            <!-- ── LEFT COL 2: Guest Lists + Other Sections ── -->
+            <div class="left-col">
+
+                <div class="group-label">Guest Lists</div>
+                <div class="group-body">
+                    <div class="row">
+                        <div>
+                            <label>Headliner Guests</label>
+                            <textarea id="headlinerGuests"></textarea>
+                        </div>
+                        <div>
+                            <label>Direct Support Guests</label>
+                            <textarea id="directSupportGuests"></textarea>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div>
+                            <label>XODIA Guests</label>
+                            <textarea id="xodiaGuests"></textarea>
+                        </div>
+                        <div>
+                            <label>Free Spots</label>
+                            <textarea id="freeSpots" placeholder="Sponsors, comps, etc."></textarea>
+                        </div>
+                    </div>
+                    <div>
+                        <label>Promo Team</label>
+                        <textarea id="promoTeam"></textarea>
+                    </div>
+                </div>
+
+                <div class="group-label">Other Sections</div>
+                <div class="group-body">
+                    <div class="row-count">
+                        <label>How many other sections?</label>
+                        <input id="otherCount" type="number" min="1" max="10" value="1">
+                    </div>
+                    <div id="otherContainer"></div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ── RIGHT: PREVIEW ── -->
+    <div class="right-panel" id="dropZone">
+        <div class="drop-hint">Drop a CSV file to import</div>
+
+        <div class="preview-header">
+            <h2>Preview</h2>
+            <button class="btn-primary" onclick="exportPDF()">Export PDF</button>
+            <button class="btn-secondary" onclick="copyPreview()">Copy</button>
+            <button class="btn-secondary" onclick="exportCSV()">Save</button>
+            <button class="btn-secondary" onclick="importCSV()">Load</button>
+            <select id="savedGuestListsSelect" class="backend-select" aria-label="Saved guest lists">
+                <option value="">Saved guest lists...</option>
+            </select>
+            <button class="btn-secondary" onclick="refreshSavedGuestLists(true)">Refresh DB</button>
+            <button class="btn-secondary" onclick="saveGuestListToServer()">Save DB</button>
+            <button class="btn-secondary" onclick="loadSelectedGuestList()">Load DB</button>
+            <button class="btn-danger" onclick="resetAll()">Reset</button>
+            <div id="pageWarning" class="page-warning"></div>
+        </div>
+
+        <div class="preview-scroll">
+            <div id="preview"></div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+
+/* ======= NAV DROPDOWN ======= */
+const navDropdown = document.getElementById('navDropdown');
+const navToggle = document.getElementById('navToggle');
+
+navToggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    navDropdown.classList.toggle('active');
+});
+
+document.addEventListener('click', function (e) {
+    if (!navDropdown.contains(e.target)) {
+        navDropdown.classList.remove('active');
+    }
+});
+
+document.querySelectorAll('.nav-menu a').forEach(link => {
+    link.addEventListener('click', function () {
+        navDropdown.classList.remove('active');
+    });
+});
+
+const LOGO_URL = "https://images.squarespace-cdn.com/content/v1/681ea18dd168a935c26295bd/7803d573-dd87-40ed-9570-0bc7c5ed8915/xodia_logo_black.png?format=750w";
+
+let logoAspectRatio = 1;
+let logoDataUrl = null;
+(function initLogo() {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = function () {
+        if (img.naturalWidth && img.naturalHeight) {
+            logoAspectRatio = img.naturalWidth / img.naturalHeight;
+        }
+        try {
+            const canvas = document.createElement("canvas");
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            canvas.getContext("2d").drawImage(img, 0, 0);
+            logoDataUrl = canvas.toDataURL("image/png");
+        } catch(e) {
+            logoDataUrl = null;
+        }
+    };
+    img.src = LOGO_URL;
+})();
+
+function smartCap(str) {
+    if (!str) return "";
+    if (str === str.toUpperCase()) return str;
+    return str.toLowerCase().split(" ").map(w => w[0].toUpperCase() + w.slice(1)).join(" ");
+}
+
+function getShowNameCap() { return showName.value.trim().toUpperCase(); }
+function getHeadlinerCap() { return headliner.value.trim().toUpperCase(); }
+function getDirectSupportCap() { return directSupport.value.trim().toUpperCase(); }
+
+function cleanList(text, globalSeen) {
+    const seen = globalSeen || new Set();
+    return text
+        .split("\n")
+        .map(n => smartCap(n.trim()))
+        .filter(n => n)
+        .sort()
+        .map(n => {
+            if (seen.has(n)) return `${n} <span class="dup">(DUPLICATE!)</span>`;
+            seen.add(n);
+            return n;
+        });
+}
+
+const layoutConfig = {
+    topY: 80,
+    maxY: 740,
+    headerHeight: 16,
+    lineHeight: 14,
+    sectionSpacing: 10
+};
+
+function getDayOfShowLines() {
+    const el = document.getElementById('dayOfShowPricing');
+    const raw = el ? el.value : "";
+    return raw.split("\n").map(l => l.trim()).filter(Boolean);
+}
+
+function syncTopYForDayOfShowLines(lines) {
+    const n = (lines && lines.length) ? lines.length : 1;
+    const dayLineH = 12;
+    const totalNamesY = 60 + dayLineH * (n + 2);
+    layoutConfig.topY = totalNamesY + 20;
+}
+
+function getSectionsForLayout() {
+    const globalSeen = new Set();
+    const headlinerName = getHeadlinerCap();
+    const directSupportName = getDirectSupportCap();
+    const sections = [];
+    let totalNames = 0;
+
+    function addSection(title, rawText) {
+        const list = cleanList(rawText, globalSeen);
+        if (!list.length) return;
+        if (title === "Headliner") title = headlinerName;
+        if (title === "Direct Support") title = directSupportName;
+        sections.push({ title, list });
+        totalNames += list.length;
+    }
+
+    addSection("Headliner", headlinerGuests.value);
+    addSection("Direct Support", directSupportGuests.value);
+    addSection("XODIA Guests", xodiaGuests.value);
+    addSection("Free Spots", (typeof freeSpots !== "undefined" ? freeSpots.value : ""));
+    addSection("Promo Team", promoTeam.value);
+
+    const djBlocks = [...document.querySelectorAll(".dj-block")];
+    djBlocks.forEach((block, idx) => {
+        const djData = getDJBlockData(block, `DJ ${idx + 1}`);
+        const title = buildDJTitleFromMembers(djData.members, `DJ ${idx + 1}`);
+        addSection(title, djData.guests);
+    });
+
+    const otherBlocks = [...document.querySelectorAll(".other-block")];
+    otherBlocks.forEach(block => {
+        const name = smartCap(block.querySelector(".other-name").value.trim());
+        const guests = block.querySelector(".other-guests").value;
+        addSection(name, guests);
+    });
+
+    return { sections, totalNames };
+}
+
+function layoutSections(sections) {
+    const { topY, maxY, headerHeight, lineHeight, sectionSpacing } = layoutConfig;
+    const pages = [];
+    let currentPage = { columns: [[], [], []] };
+    pages.push(currentPage);
+    let colIndex = 0;
+    let y = topY;
+
+    function advanceColumnOrPage() {
+        colIndex++;
+        if (colIndex > 2) {
+            currentPage = { columns: [[], [], []] };
+            pages.push(currentPage);
+            colIndex = 0;
+        }
+        y = topY;
+    }
+
+    sections.forEach(sec => {
+        let remaining = sec.list.slice();
+        let isFirstChunk = true;
+        while (remaining.length > 0) {
+            if (y + headerHeight > maxY) advanceColumnOrPage();
+            let namesChunk = [];
+            let yTemp = y + headerHeight;
+            while (remaining.length > 0 && (yTemp + lineHeight) <= maxY) {
+                namesChunk.push(remaining.shift());
+                yTemp += lineHeight;
+            }
+            if (namesChunk.length === 0) { advanceColumnOrPage(); continue; }
+            const titleText = isFirstChunk ? sec.title : sec.title + " (cont.)";
+            currentPage.columns[colIndex].push({ title: titleText, names: namesChunk });
+            y = yTemp + sectionSpacing;
+            isFirstChunk = false;
+            if (remaining.length > 0) advanceColumnOrPage();
+        }
+    });
+
+    return pages;
+}
+
+function getDJMembersFromBlock(block) {
+    return [...block.querySelectorAll(".dj-member-row")].map(row => ({
+        stage: (row.querySelector(".dj-stage")?.value || "").trim(),
+        legal: (row.querySelector(".dj-legal")?.value || "").trim()
+    }));
+}
+
+function getDJBlockData(block, fallbackStage = "") {
+    const memberCountEl = block.querySelector(".dj-member-count");
+    const memberCount = Math.min(3, Math.max(1, Number(memberCountEl?.value || 1)));
+    const existing = getDJMembersFromBlock(block);
+    const members = [];
+    for (let i = 0; i < memberCount; i++) members.push(existing[i] || { stage: "", legal: "" });
+    const legacyName = block.querySelector(".dj-name")?.value?.trim() || "";
+    if (!members[0].stage && legacyName) members[0].stage = legacyName;
+    if (!members[0].stage && fallbackStage) members[0].stage = fallbackStage;
+    const guests = block.querySelector(".dj-guests")?.value || "";
+    return { memberCount, members, guests };
+}
+
+function buildDJTitleFromMembers(members, fallbackTitle) {
+    const cleaned = (members || [])
+        .map(m => ({ stage: (m.stage || "").trim(), legal: (m.legal || "").trim() }))
+        .filter(m => m.stage || m.legal);
+    if (!cleaned.length) return fallbackTitle;
+
+    const stages = cleaned.map(m => smartCap(m.stage)).filter(Boolean);
+    const legals = cleaned.map(m => smartCap(m.legal)).filter(Boolean);
+
+    if (stages.length >= 2) {
+        const base = stages[0].toLowerCase();
+        const allMatch = stages.every(s => s.toLowerCase() === base);
+        if (allMatch) {
+            const groupStage = stages[0];
+            if (!legals.length) return groupStage;
+            const legalList = legals.length === 1 ? legals[0]
+                : legals.length === 2 ? `${legals[0]} & ${legals[1]}`
+                : `${legals[0]}, ${legals[1]} & ${legals[2]}`;
+            return `${groupStage} (${legalList})`;
+        }
+    }
+
+    const parts = cleaned.map(m => {
+        const stage = smartCap(m.stage);
+        const legal = smartCap(m.legal);
+        if (stage && legal) return `${stage} (${legal})`;
+        return stage || legal;
+    });
+    if (parts.length === 1) return parts[0];
+    if (parts.length === 2) return `${parts[0]} & ${parts[1]}`;
+    return `${parts[0]}, ${parts[1]} & ${parts[2]}`;
+}
+
+function createDJMemberRow(memberIndex, memberData) {
+    const row = document.createElement("div");
+    row.className = "dj-member-row";
+    const heading = document.createElement("div");
+    heading.className = "dj-member-heading";
+    heading.textContent = `Name ${memberIndex}`;
+    row.appendChild(heading);
+    const meta = document.createElement("div");
+    meta.className = "dj-member-meta";
+    const stageWrap = document.createElement("div");
+    stageWrap.innerHTML = `<label>Stage Name</label><input class="dj-stage" type="text">`;
+    stageWrap.querySelector("input").value = memberData?.stage || "";
+    meta.appendChild(stageWrap);
+    const legalWrap = document.createElement("div");
+    legalWrap.innerHTML = `<label>Legal Name</label><input class="dj-legal" type="text">`;
+    legalWrap.querySelector("input").value = memberData?.legal || "";
+    meta.appendChild(legalWrap);
+    row.appendChild(meta);
+    return row;
+}
+
+function setDJMembersInBlock(block, desiredCount, seedMembers = []) {
+    const wrap = block.querySelector(".dj-members-wrap");
+    if (!wrap) return;
+    const count = Math.min(3, Math.max(1, Number(desiredCount || 1)));
+    wrap.innerHTML = "";
+    for (let i = 0; i < count; i++) {
+        wrap.appendChild(createDJMemberRow(i + 1, seedMembers[i] || { stage: "", legal: "" }));
+    }
+}
+
+function buildDJInputs(preserveExisting = true) {
+    const count = Math.min(10, Math.max(1, Number(djCount.value || 1)));
+    const container = djContainer;
+    const oldBlocks = preserveExisting ? [...container.querySelectorAll(".dj-block")] : [];
+    const oldData = oldBlocks.map((b, idx) => getDJBlockData(b, `DJ ${idx + 1}`));
+    container.innerHTML = "";
+
+    for (let i = 0; i < count; i++) {
+        const existing = preserveExisting ? oldData[i] : null;
+        const fallbackStage = `DJ ${i + 1}`;
+        const memberCount = existing?.memberCount || 1;
+        const members = existing?.members?.length ? existing.members : [{ stage: fallbackStage, legal: "" }];
+        const guests = existing?.guests || "";
+
+        const block = document.createElement("div");
+        block.className = "dj-block";
+        block.innerHTML = `
+            <div class="drag">☰ Drag to reorder</div>
+            <div>
+                <label>DJ ${i + 1} — Format</label>
+                <select class="dj-member-count">
+                    <option value="1">Solo (1 name)</option>
+                    <option value="2">Duo (2 names)</option>
+                    <option value="3">Trio (3 names)</option>
+                </select>
+            </div>
+            <div class="dj-members-wrap"></div>
+            <div>
+                <label>Guest List</label>
+                <textarea class="dj-guests"></textarea>
+            </div>
+        `;
+        block.querySelector(".dj-member-count").value = String(memberCount);
+        block.querySelector(".dj-guests").value = guests;
+        const seed = [...members];
+        while (seed.length < memberCount) seed.push({ stage: "", legal: "" });
+        setDJMembersInBlock(block, memberCount, seed);
+        container.appendChild(block);
+    }
+
+    Sortable.create(container, { handle: ".drag", animation: 150, onEnd: updatePreview });
+    updatePreview();
+}
+
+function buildOtherInputs(preserveExisting = true) {
+    const count = Number(otherCount.value);
+    const container = otherContainer;
+    const old = preserveExisting ? [...container.querySelectorAll(".other-block")] : [];
+    container.innerHTML = "";
+
+    for (let i = 0; i < count; i++) {
+        let name = preserveExisting && old[i]?.querySelector(".other-name")?.value || `Other ${i+1}`;
+        let guests = preserveExisting && old[i]?.querySelector(".other-guests")?.value || "";
+        const block = document.createElement("div");
+        block.className = "other-block";
+        block.innerHTML = `
+            <div class="drag">☰ Drag to reorder</div>
+            <div>
+                <label>Section Name</label>
+                <input class="other-name" type="text" value="${name}">
+            </div>
+            <div>
+                <label>Guest List</label>
+                <textarea class="other-guests">${guests}</textarea>
+            </div>
+        `;
+        container.appendChild(block);
+    }
+
+    Sortable.create(container, { handle: ".drag", animation: 150, onEnd: updatePreview });
+    updatePreview();
+}
+
+document.addEventListener("input", e => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") updatePreview();
+});
+document.addEventListener("change", e => {
+    if (e.target.tagName === "SELECT") updatePreview();
+});
+
+djContainer.addEventListener("change", e => {
+    if (!e.target.classList.contains("dj-member-count")) return;
+    const block = e.target.closest(".dj-block");
+    if (!block) return;
+    const desired = Math.min(3, Math.max(1, Number(e.target.value || 1)));
+    const existing = getDJMembersFromBlock(block);
+    setDJMembersInBlock(block, desired, existing);
+    updatePreview();
+});
+
+headliner.addEventListener("blur", () => { headliner.value = getHeadlinerCap(); updatePreview(); });
+showName.addEventListener("blur", () => { showName.value = getShowNameCap(); updatePreview(); });
+directSupport.addEventListener("blur", () => { directSupport.value = getDirectSupportCap(); updatePreview(); });
+
+djCount.addEventListener("input", () => buildDJInputs());
+otherCount.addEventListener("input", () => buildOtherInputs());
+buildDJInputs();
+buildOtherInputs();
+
+function dateFormat(d) {
+    if (!d) return "";
+    const [y,m,day] = d.split("-");
+    return `${m}.${day}.${y}`;
+}
+
+function updatePreview() {
+    const showCap = getShowNameCap();
+    const dateStr = dateFormat(date.value);
+    const title = `${showCap} [${dateStr}]`;
+    const dayPricingLines = getDayOfShowLines();
+    syncTopYForDayOfShowLines(dayPricingLines);
+    const dayPricingHTML = dayPricingLines.length ? dayPricingLines.join("<br>") : "N/A";
+    const { sections, totalNames } = getSectionsForLayout();
+    const pages = layoutSections(sections);
+
+    let html = "";
+    pages.forEach((page, pIndex) => {
+        const pageNum = pIndex + 1;
+        html += `<details class="page-block"${pIndex === 0 ? " open" : ""}>`;
+        html += `<summary>Page ${pageNum}</summary>`;
+
+        if (pIndex === 0) {
+            html += `<div class="page-sheet">`;
+            html += `<img src="${LOGO_URL}" alt="Logo" style="position:absolute;top:28px;right:32px;max-width:80px;max-height:40px;width:auto;height:auto;object-fit:contain;">`;
+            html += `<div style="text-align:center;font-weight:700;font-size:13px;margin-bottom:3px;">GUEST LIST</div>`;
+            html += `<div style="text-align:center;font-size:10px;color:#555;margin-bottom:8px;">${title}</div>`;
+            html += `<div style="font-size:10px;font-weight:700;margin-bottom:2px;">Day of Show Pricing:</div>`;
+            html += `<div style="font-size:10px;margin-bottom:6px;">${dayPricingHTML}</div>`;
+            html += `<div style="font-size:10px;margin-bottom:12px;color:#555;">Total names: ${totalNames}</div>`;
+        } else {
+            html += `<div class="page-sheet">`;
+        }
+
+        html += `<div class="col-layout">`;
+        page.columns.forEach(col => {
+            html += `<div class="col-section">`;
+            col.forEach(block => {
+                html += `<div class="section-title">${block.title}</div>`;
+                html += block.names.join("<br>") + "<br><br>";
+            });
+            html += `</div>`;
+        });
+        html += `</div>`;
+        html += `<div class="page-number">— ${pageNum} —</div></div></details>`;
+
+        if (pIndex < pages.length - 1) html += `<hr style="margin:12px 0;border:none;border-top:1px dashed #ddd;">`;
+    });
+
+    if (!pages.length) {
+        html = `<details class="page-block" open>
+            <summary>Page 1</summary>
+            <div class="page-sheet">
+                <img src="${LOGO_URL}" alt="Logo" style="position:absolute;top:28px;right:32px;max-width:80px;max-height:40px;width:auto;height:auto;object-fit:contain;">
+                <div style="text-align:center;font-weight:700;font-size:13px;margin-bottom:3px;">GUEST LIST</div>
+                <div style="text-align:center;font-size:10px;color:#555;margin-bottom:8px;">${title}</div>
+                <div style="font-size:10px;font-weight:700;margin-bottom:2px;">Day of Show Pricing:</div>
+                <div style="font-size:10px;margin-bottom:6px;">${dayPricingHTML}</div>
+                <div style="font-size:10px;margin-bottom:12px;color:#555;">Total names: 0</div>
+                <div class="col-layout"><div class="col-section"></div><div class="col-section"></div><div class="col-section"></div></div>
+                <div class="page-number">— 1 —</div>
+            </div>
+        </details>`;
+    }
+
+    preview.innerHTML = html;
+    pageWarning.textContent = pages.length > 1 ? "⚠ This PDF will be multiple pages" : "";
+    pageWarning.classList.toggle("visible", pages.length > 1);
+}
+
+function copyPreview() {
+    const showCap = getShowNameCap();
+    const dateStr = dateFormat(date.value);
+    const title = `${showCap} [${dateStr}]`;
+    const dayPricingLines = getDayOfShowLines();
+    const { sections, totalNames } = getSectionsForLayout();
+    const lines = [];
+    lines.push("GUEST LIST");
+    lines.push(title);
+    lines.push("Day of Show Pricing:");
+    if (dayPricingLines.length) dayPricingLines.forEach(l => lines.push(` - ${l}`));
+    else lines.push(" - N/A");
+    lines.push(`Total names: ${totalNames}`);
+    lines.push("");
+    sections.forEach(sec => {
+        lines.push(`${sec.title}:`);
+        sec.list.forEach(name => lines.push(` - ${String(name).replace(/<[^>]*>/g, "")}`));
+        lines.push("");
+    });
+    const text = lines.join("\n");
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => alert("Copied!")).catch(() => fallbackCopy(text));
+    } else { fallbackCopy(text); }
+}
+
+function fallbackCopy(text) {
+    const temp = document.createElement("textarea");
+    temp.value = text;
+    document.body.appendChild(temp);
+    temp.select();
+    document.execCommand("copy");
+    document.body.removeChild(temp);
+    alert("Copied!");
+}
+
+function resetAll() {
+    if (!confirm("Reset all fields?")) return;
+    showName.value = ""; headliner.value = ""; directSupport.value = "";
+    date.value = ""; dayOfShowPricing.value = "";
+    headlinerGuests.value = ""; directSupportGuests.value = "";
+    xodiaGuests.value = "";
+    if (typeof freeSpots !== "undefined") freeSpots.value = "";
+    promoTeam.value = "";
+    djCount.value = 1; otherCount.value = 1;
+    djContainer.innerHTML = ""; otherContainer.innerHTML = "";
+    buildDJInputs(false); buildOtherInputs(false);
+    updatePreview();
+}
+
+function getGuestListData() {
+    let data = {
+        showName: showName.value, headliner: headliner.value,
+        directSupport: directSupport.value, date: date.value,
+        dayOfShowPricing: dayOfShowPricing.value,
+        headlinerGuests: headlinerGuests.value,
+        directSupportGuests: directSupportGuests.value,
+        xodiaGuests: xodiaGuests.value,
+        freeSpots: (typeof freeSpots !== "undefined" ? freeSpots.value : ""),
+        promoTeam: promoTeam.value,
+        djCount: djCount.value, djs: [],
+        otherCount: otherCount.value, others: []
+    };
+    document.querySelectorAll(".dj-block").forEach((b, i) => {
+        const d = getDJBlockData(b, `DJ ${i + 1}`);
+        data.djs.push({ memberCount: d.memberCount, members: d.members, guests: d.guests });
+    });
+    document.querySelectorAll(".other-block").forEach(b => {
+        data.others.push({ name: b.querySelector(".other-name").value, guests: b.querySelector(".other-guests").value });
+    });
+    return data;
+}
+
+function getGuestListSaveName(data = getGuestListData()) {
+    const show = (data.showName || "Guest List").trim() || "Guest List";
+    const datePart = data.date ? ` - ${data.date}` : "";
+    return `${show}${datePart}`;
+}
+
+function applyGuestListData(data) {
+    showName.value = (data.showName || "").trim().toUpperCase();
+    headliner.value = (data.headliner || "").trim().toUpperCase();
+    directSupport.value = (data.directSupport || "").trim().toUpperCase();
+    date.value = data.date || "";
+    dayOfShowPricing.value = data.dayOfShowPricing || "";
+    headlinerGuests.value = data.headlinerGuests || "";
+    directSupportGuests.value = data.directSupportGuests || "";
+    xodiaGuests.value = data.xodiaGuests || "";
+    if (typeof freeSpots !== "undefined") freeSpots.value = data.freeSpots || "";
+    promoTeam.value = data.promoTeam || "";
+    const importedDjs = Array.isArray(data.djs) ? data.djs : [];
+    djCount.value = data.djCount || importedDjs.length || 1;
+    otherCount.value = data.otherCount || 1;
+    buildDJInputs(false); buildOtherInputs(false);
+    const blocks = [...document.querySelectorAll(".dj-block")];
+    importedDjs.forEach((dj, i) => {
+        if (!blocks[i]) return;
+        let members = [];
+        if (Array.isArray(dj.members)) members = dj.members;
+        else if (typeof dj.name === "string" && dj.name.trim()) members = [{ stage: dj.name.trim(), legal: "" }];
+        else if (typeof dj.stageName === "string" && dj.stageName.trim()) members = [{ stage: dj.stageName.trim(), legal: (dj.legalName || "").trim() }];
+        const desiredCount = Math.min(3, Math.max(1, Number(dj.memberCount || members.length || 1)));
+        const block = blocks[i];
+        block.querySelector(".dj-member-count").value = String(desiredCount);
+        const seed = [...members];
+        while (seed.length < desiredCount) seed.push({ stage: "", legal: "" });
+        setDJMembersInBlock(block, desiredCount, seed);
+        block.querySelector(".dj-guests").value = dj.guests || "";
+    });
+    const otherBlocks = [...document.querySelectorAll(".other-block")];
+    (data.others || []).forEach((other, i) => {
+        if (otherBlocks[i]) {
+            otherBlocks[i].querySelector(".other-name").value = other.name || `Other ${i+1}`;
+            otherBlocks[i].querySelector(".other-guests").value = other.guests || "";
+        }
+    });
+    updatePreview();
+}
+
+function exportCSV() {
+    const data = getGuestListData();
+    const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${getShowNameCap()}_${dateFormat(date.value)}.json`;
+    a.click();
+}
+
+function importFromFile(file) {
+    if (!file) return;
+    const name = (file.name || "").toLowerCase();
+    if (!name.endsWith(".csv") && !name.endsWith(".json")) { alert("Please drop a .json file."); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+        let data;
+        try { data = JSON.parse(reader.result); }
+        catch (err) { alert("Invalid file."); return; }
+        applyGuestListData(data);
+    };
+    reader.readAsText(file);
+}
+
+function importCSV() {
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = ".csv,.json";
+    input.onchange = e => importFromFile(e.target.files[0]);
+    input.click();
+}
+
+const API_BASE = (window.GUEST_LIST_API_BASE || localStorage.getItem("guestListApiBase") || "").replace(/\/$/, "");
+let serverConnected = false;
+let savedGuestListsCache = [];
+
+function showStatusDialog(message, type = "info", title = "Status", timeout = 2800) {
+    const box = document.getElementById("statusDialog");
+    const titleEl = document.getElementById("statusDialogTitle");
+    const messageEl = document.getElementById("statusDialogMessage");
+    if (!box || !titleEl || !messageEl) return;
+    box.className = `status-dialog open ${type}`;
+    titleEl.textContent = title;
+    messageEl.textContent = message;
+    clearTimeout(box._hideTimer);
+    if (timeout) {
+        box._hideTimer = setTimeout(() => box.classList.remove("open"), timeout);
+    }
+}
+
+async function apiRequest(path, options = {}) {
+    const res = await fetch(`${API_BASE}${path}`, {
+        headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+        ...options
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(payload.error || `Request failed (${res.status})`);
+    return payload;
+}
+
+function populateSavedGuestLists(items) {
+    const select = document.getElementById("savedGuestListsSelect");
+    if (!select) return;
+    const previous = select.value;
+    select.innerHTML = '<option value="">Saved guest lists...</option>';
+    items.forEach(item => {
+        const option = document.createElement("option");
+        option.value = item._id;
+        const datePart = item.date ? ` — ${item.date}` : "";
+        option.textContent = `${item.name || item.showName || "Untitled"}${datePart}`;
+        select.appendChild(option);
+    });
+    if (previous && items.some(item => item._id === previous)) select.value = previous;
+}
+
+async function checkServerConnection() {
+    try {
+        await apiRequest("/api/health");
+        serverConnected = true;
+        showStatusDialog("Server connected. MongoDB guest lists are available.", "success", "Server");
+        await refreshSavedGuestLists(false);
+    } catch (err) {
+        serverConnected = false;
+        showStatusDialog("Server not connected. Local PDF, copy, save, and load still work.", "warning", "Server");
+    }
+}
+
+async function refreshSavedGuestLists(showMessage = true) {
+    try {
+        const payload = await apiRequest("/api/guest-lists");
+        savedGuestListsCache = payload.items || [];
+        populateSavedGuestLists(savedGuestListsCache);
+        serverConnected = true;
+        if (showMessage) showStatusDialog(`Loaded ${savedGuestListsCache.length} saved guest list${savedGuestListsCache.length === 1 ? "" : "s"}.`, "success", "MongoDB");
+    } catch (err) {
+        serverConnected = false;
+        if (showMessage) showStatusDialog(err.message || "Could not load saved guest lists.", "error", "MongoDB");
+    }
+}
+
+async function saveGuestListToServer() {
+    const data = getGuestListData();
+    try {
+        const payload = await apiRequest("/api/guest-lists", {
+            method: "POST",
+            body: JSON.stringify({
+                name: getGuestListSaveName(data),
+                showName: data.showName,
+                date: data.date,
+                headliner: data.headliner,
+                data
+            })
+        });
+        showStatusDialog("Guest list saved to MongoDB.", "success", "Saved");
+        await refreshSavedGuestLists(false);
+        const select = document.getElementById("savedGuestListsSelect");
+        if (select && payload.item?._id) select.value = payload.item._id;
+    } catch (err) {
+        showStatusDialog(err.message || "Guest list could not be saved.", "error", "Save failed");
+    }
+}
+
+async function loadSelectedGuestList() {
+    const select = document.getElementById("savedGuestListsSelect");
+    const id = select ? select.value : "";
+    if (!id) {
+        showStatusDialog("Select a saved guest list first.", "warning", "Load DB");
+        return;
+    }
+    try {
+        const payload = await apiRequest(`/api/guest-lists/${encodeURIComponent(id)}`);
+        applyGuestListData(payload.item?.data || {});
+        showStatusDialog("Saved guest list loaded.", "success", "Loaded");
+    } catch (err) {
+        showStatusDialog(err.message || "Guest list could not be loaded.", "error", "Load failed");
+    }
+}
+
+function enablePanelDrop(panelEl) {
+    if (!panelEl) return;
+    let dragDepth = 0;
+    function setOver(on) {
+        if (on) panelEl.classList.add("dragover");
+        else panelEl.classList.remove("dragover");
+    }
+    panelEl.addEventListener("dragenter", e => {
+        if (!e.dataTransfer?.types?.includes("Files")) return;
+        e.preventDefault(); dragDepth++; setOver(true);
+    });
+    panelEl.addEventListener("dragover", e => {
+        if (!e.dataTransfer?.types?.includes("Files")) return;
+        e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setOver(true);
+    });
+    panelEl.addEventListener("dragleave", e => {
+        if (!e.dataTransfer?.types?.includes("Files")) return;
+        dragDepth = Math.max(0, dragDepth - 1);
+        if (dragDepth === 0) setOver(false);
+    });
+    panelEl.addEventListener("drop", e => {
+        e.preventDefault(); dragDepth = 0; setOver(false);
+        const files = e.dataTransfer?.files;
+        if (!files?.length) return;
+        importFromFile(files[0]);
+    });
+}
+
+window.addEventListener("dragover", e => { if (e.dataTransfer?.types?.includes("Files")) e.preventDefault(); });
+window.addEventListener("drop", e => { if (e.dataTransfer?.files?.length) e.preventDefault(); });
+enablePanelDrop(document.getElementById("dropZone"));
+
+function exportPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "pt", format: "letter" });
+    const showCap = getShowNameCap();
+    const dateStr = dateFormat(date.value);
+    const title = `${showCap} [${dateStr}]`;
+    const dayPricingLines = getDayOfShowLines();
+    syncTopYForDayOfShowLines(dayPricingLines);
+    const topY = layoutConfig.topY;
+    const xLeft = 50;
+    const colWidth = 165;
+    const colX = [xLeft, xLeft + colWidth + 10, xLeft + (colWidth + 10) * 2];
+    const maxWidth = colWidth;
+    const { sections, totalNames } = getSectionsForLayout();
+    const stripHtml = s => String(s).replace(/<[^>]*>/g, "");
+
+    function drawMainTitle(pageIndex) {
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const dayLineH = 12;
+        if (pageIndex === 0) {
+            const maxLogoWidth = 80, maxLogoHeight = 40;
+            let logoW = maxLogoWidth;
+            let logoH = maxLogoWidth / (logoAspectRatio || 1);
+            if (logoH > maxLogoHeight) { logoH = maxLogoHeight; logoW = logoH * (logoAspectRatio || 1); }
+            try { if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", pageWidth - logoW - 30, 20, logoW, logoH); } catch(e) {}
+            doc.setFont("helvetica", "bold"); doc.setFontSize(14);
+            doc.text("GUEST LIST", pageWidth / 2, 30, { align: "center" });
+            doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+            doc.text(title, pageWidth / 2, 46, { align: "center" });
+            let y = 60;
+            doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+            doc.text("Day of Show Pricing:", xLeft, y); y += dayLineH;
+            doc.setFont("helvetica", "normal"); doc.setFontSize(11);
+            if (dayPricingLines.length) { dayPricingLines.forEach(line => { doc.text(line, xLeft, y); y += dayLineH; }); }
+            else { doc.text("N/A", xLeft, y); y += dayLineH; }
+            y += dayLineH;
+            doc.setFontSize(11); doc.text(`Total names: ${totalNames}`, xLeft, y);
+        }
+    }
+
+    function drawPageNumber(n) {
+        const pageWidth = doc.internal.pageSize.getWidth();
+        doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+        doc.text(`Page ${n}`, pageWidth / 2, 770, { align: "center" });
+    }
+
+    const pages = layoutSections(sections);
+    if (!pages.length || !sections.length) {
+        drawMainTitle(0); drawPageNumber(1);
+        doc.save(`${showCap}_${dateStr}.pdf`); return;
+    }
+
+    pages.forEach((page, pIndex) => {
+        if (pIndex > 0) doc.addPage();
+        drawMainTitle(pIndex);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+        page.columns.forEach((blocks, colIdx) => {
+            let y = topY;
+            const x = colX[colIdx];
+            blocks.forEach(block => {
+                doc.setFont("helvetica", "bold"); doc.setFontSize(12);
+                doc.splitTextToSize(block.title, maxWidth).forEach(line => { doc.text(line, x, y); y += layoutConfig.headerHeight; });
+                doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+                block.names.forEach(name => {
+                    doc.splitTextToSize(stripHtml(name), maxWidth).forEach(line => { doc.text(line, x, y); y += layoutConfig.lineHeight; });
+                });
+                y += layoutConfig.sectionSpacing;
+            });
+        });
+        drawPageNumber(pIndex + 1);
+    });
+
+    doc.save(`${showCap}_${dateStr}.pdf`);
+}
+
+updatePreview();
+checkServerConnection();
+
+function openHelp() {
+    document.getElementById("helpModal").classList.add("open");
+}
+function closeHelp() {
+    document.getElementById("helpModal").classList.remove("open");
+}
+function closeHelpOutside(e) {
+    if (e.target === document.getElementById("helpModal")) closeHelp();
+}
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeHelp(); });
+
+const LOGO_LIGHT = "https://images.squarespace-cdn.com/content/v1/681ea18dd168a935c26295bd/7803d573-dd87-40ed-9570-0bc7c5ed8915/xodia_logo_black.png?format=750w";
+const LOGO_DARK  = "https://images.squarespace-cdn.com/content/v1/681ea18dd168a935c26295bd/c311da3d-6fbf-446a-858c-227fa011e7e3/Xodia+MEDIA+Group+%28TRANS%29+%281%29+%281%29.png?format=750w";
+
+function applyDark(isDark) {
+    document.body.classList.toggle("dark", isDark);
+    document.getElementById("darkBtn").textContent = isDark ? "☀️" : "🌙";
+    document.getElementById("headerLogo").src = isDark ? LOGO_DARK : LOGO_LIGHT;
+}
+
+function toggleDark() {
+    const isDark = !document.body.classList.contains("dark");
+    applyDark(isDark);
+    localStorage.setItem("dark", isDark ? "1" : "");
+}
+
+// Restore dark mode preference
+(function() {
+    if (localStorage.getItem("dark")) applyDark(true);
+})();
+</script>
+
+</body>
+</html>
