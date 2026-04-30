@@ -38,12 +38,21 @@ async function getCollection() {
     collection = client.db(dbName).collection(collectionName);
     await collection.createIndex({ updatedAt: -1 });
     await collection.createIndex({ name: 1 });
+    await collection.createIndex({ normalizedName: 1 }, { unique: true, sparse: true });
   }
   return collection;
 }
 
 function cleanString(value, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback;
+}
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeName(value) {
+  return cleanString(value).toLowerCase();
 }
 
 app.get('/api/health', async (req, res) => {
@@ -80,9 +89,18 @@ app.post('/api/guest-lists', async (req, res) => {
       createdAt: now,
       updatedAt: now
     };
+    doc.normalizedName = normalizeName(doc.name);
+    const existing = await col.findOne({
+      $or: [
+        { normalizedName: doc.normalizedName },
+        { name: { $regex: `^${escapeRegex(doc.name)}$`, $options: 'i' } }
+      ]
+    });
+    if (existing) return res.status(409).json({ error: 'A guest list with this name is already saved.' });
     const result = await col.insertOne(doc);
     res.status(201).json({ item: { ...doc, _id: result.insertedId } });
   } catch (err) {
+    if (err && err.code === 11000) return res.status(409).json({ error: 'A guest list with this name is already saved.' });
     res.status(500).json({ error: err.message });
   }
 });

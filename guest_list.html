@@ -294,8 +294,8 @@ body.dark .status-dialog-message { color: #c9d1d9; }
 
 /* ── BACKEND STATUS + SAVED LIST CONTROLS ───────── */
 .backend-select {
-    min-width: 210px;
-    max-width: 260px;
+    min-width: 280px;
+    max-width: 340px;
     background: #fff;
     border: 1px solid #d0d0d0;
     border-radius: 6px;
@@ -303,7 +303,10 @@ body.dark .status-dialog-message { color: #c9d1d9; }
     font-family: 'Inter', sans-serif;
     font-size: 14px;
     font-weight: 700;
-    padding: 9px 10px;
+    padding: 9px 38px 9px 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
 }
 .status-dialog {
     position: fixed;
@@ -599,6 +602,14 @@ button {
     border-color: #e8c4c0;
 }
 .btn-danger:hover { background: #fdf3f2; }
+.btn-save-db {
+    background: #c0392b;
+    color: #fff;
+    border-color: #c0392b;
+}
+.btn-save-db:hover { background: #a93226; border-color: #a93226; }
+body.dark .btn-save-db { background: #da3633; color: #fff; border-color: #da3633; }
+body.dark .btn-save-db:hover { background: #f85149; border-color: #f85149; }
 
 /* ── DROP ZONE ───────────────────────────────────── */
 .right-panel.dragover { outline: 2px dashed #888; outline-offset: -4px; }
@@ -722,17 +733,17 @@ button {
         <div class="guide-section">
             <h4>Buttons</h4>
             <ul>
-                <li><strong>Export PDF</strong> — download a print-ready PDF</li>
+                <li><strong>Download PDF</strong> — download a print-ready PDF</li>
                 <li><strong>Copy</strong> — copy the full list as plain text</li>
-                <li><strong>Save</strong> — save your work as a JSON file</li>
-                <li><strong>Load</strong> — load a previously saved JSON file</li>
+                <li><strong>Download CSV</strong> — save your work as a CSV file</li>
+                <li><strong>Load</strong> — load a previously saved CSV or JSON file</li>
                 <li><strong>Reset</strong> — clear all fields (asks for confirmation)</li>
             </ul>
         </div>
 
         <div class="guide-section">
             <h4>Import by Drag &amp; Drop</h4>
-            <p>Drag a saved JSON file from your computer and drop it anywhere on the preview panel to import it instantly.</p>
+            <p>Drag a saved CSV or JSON file from your computer and drop it anywhere on the preview panel to import it instantly.</p>
         </div>
     </div>
 </div>
@@ -840,16 +851,14 @@ button {
 
         <div class="preview-header">
             <h2>Preview</h2>
-            <button class="btn-primary" onclick="exportPDF()">Export PDF</button>
+            <button class="btn-primary" onclick="exportPDF()">Download PDF</button>
             <button class="btn-secondary" onclick="copyPreview()">Copy</button>
-            <button class="btn-secondary" onclick="exportCSV()">Save</button>
+            <button class="btn-secondary" onclick="exportCSV()">Download CSV</button>
             <button class="btn-secondary" onclick="importCSV()">Load</button>
             <select id="savedGuestListsSelect" class="backend-select" aria-label="Saved guest lists">
                 <option value="">Saved guest lists...</option>
             </select>
-            <button class="btn-secondary" onclick="refreshSavedGuestLists(true)">Refresh DB</button>
-            <button class="btn-secondary" onclick="saveGuestListToServer()">Save DB</button>
-            <button class="btn-secondary" onclick="loadSelectedGuestList()">Load DB</button>
+            <button class="btn-save-db" onclick="saveGuestListToServer()">Save</button>
             <button class="btn-danger" onclick="resetAll()">Reset</button>
             <div id="pageWarning" class="page-warning"></div>
         </div>
@@ -1404,23 +1413,109 @@ function applyGuestListData(data) {
     updatePreview();
 }
 
+function csvEscape(value) {
+    const text = String(value ?? "");
+    return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function parseCSVRows(text) {
+    const rows = [];
+    let row = [];
+    let field = "";
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        const next = text[i + 1];
+        if (inQuotes) {
+            if (ch === '"' && next === '"') { field += '"'; i++; }
+            else if (ch === '"') inQuotes = false;
+            else field += ch;
+        } else {
+            if (ch === '"') inQuotes = true;
+            else if (ch === ',') { row.push(field); field = ""; }
+            else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ""; }
+            else if (ch !== '\r') field += ch;
+        }
+    }
+    row.push(field);
+    if (row.length > 1 || row[0] !== "") rows.push(row);
+    return rows;
+}
+
+function guestListDataToCSV(data) {
+    const rows = [["type", "index", "subindex", "field", "value"]];
+    const add = (type, index, subindex, field, value) => rows.push([type, index, subindex, field, value ?? ""]);
+    ["showName", "headliner", "directSupport", "date", "dayOfShowPricing", "headlinerGuests", "directSupportGuests", "xodiaGuests", "freeSpots", "promoTeam", "djCount", "otherCount"].forEach(field => add("meta", "", "", field, data[field]));
+    (data.djs || []).forEach((dj, i) => {
+        add("dj", i, "", "memberCount", dj.memberCount || 1);
+        add("dj", i, "", "guests", dj.guests || "");
+        (dj.members || []).forEach((member, j) => {
+            add("dj", i, j, "stage", member.stage || "");
+            add("dj", i, j, "legal", member.legal || "");
+        });
+    });
+    (data.others || []).forEach((other, i) => {
+        add("other", i, "", "name", other.name || "");
+        add("other", i, "", "guests", other.guests || "");
+    });
+    return rows.map(row => row.map(csvEscape).join(",")).join("\n");
+}
+
+function csvToGuestListData(text) {
+    const rows = parseCSVRows(text);
+    const header = rows.shift() || [];
+    if (header.join(",") !== "type,index,subindex,field,value") throw new Error("Unsupported CSV format.");
+    const data = { djs: [], others: [] };
+    rows.forEach(row => {
+        const [type, indexRaw, subindexRaw, field, value = ""] = row;
+        const index = Number(indexRaw || 0);
+        const subindex = Number(subindexRaw || 0);
+        if (type === "meta") {
+            data[field] = value;
+        } else if (type === "dj") {
+            if (!data.djs[index]) data.djs[index] = { memberCount: 1, members: [], guests: "" };
+            if (field === "memberCount") data.djs[index].memberCount = Number(value || 1);
+            else if (field === "guests") data.djs[index].guests = value;
+            else if (field === "stage" || field === "legal") {
+                if (!data.djs[index].members[subindex]) data.djs[index].members[subindex] = { stage: "", legal: "" };
+                data.djs[index].members[subindex][field] = value;
+            }
+        } else if (type === "other") {
+            if (!data.others[index]) data.others[index] = { name: "", guests: "" };
+            if (field === "name" || field === "guests") data.others[index][field] = value;
+        }
+    });
+    data.djCount = data.djCount || String(data.djs.length || 1);
+    data.otherCount = data.otherCount || String(data.others.length || 1);
+    return data;
+}
+
+function safeFileName(value) {
+    return String(value || "guest_list").trim().replace(/[^a-z0-9_-]+/gi, "_").replace(/^_+|_+$/g, "") || "guest_list";
+}
+
 function exportCSV() {
     const data = getGuestListData();
-    const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+    const csv = guestListDataToCSV(data);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `${getShowNameCap()}_${dateFormat(date.value)}.json`;
+    const datePart = date.value || "undated";
+    a.href = url; a.download = `${safeFileName(getShowNameCap())}_${datePart}.csv`;
     a.click();
+    URL.revokeObjectURL(url);
 }
 
 function importFromFile(file) {
     if (!file) return;
     const name = (file.name || "").toLowerCase();
-    if (!name.endsWith(".csv") && !name.endsWith(".json")) { alert("Please drop a .json file."); return; }
+    if (!name.endsWith(".csv") && !name.endsWith(".json")) { alert("Please drop a .csv or .json file."); return; }
     const reader = new FileReader();
     reader.onload = () => {
         let data;
-        try { data = JSON.parse(reader.result); }
+        try {
+            data = name.endsWith(".csv") ? csvToGuestListData(reader.result) : JSON.parse(reader.result);
+        }
         catch (err) { alert("Invalid file."); return; }
         applyGuestListData(data);
     };
@@ -1482,14 +1577,14 @@ async function checkServerConnection() {
         await apiRequest("/api/health");
         serverConnected = true;
         showStatusDialog("Server connected. MongoDB guest lists are available.", "success", "Server");
-        await refreshSavedGuestLists(false);
+        await loadSavedGuestLists(false);
     } catch (err) {
         serverConnected = false;
         showStatusDialog("Server not connected. Local PDF, copy, save, and load still work.", "warning", "Server");
     }
 }
 
-async function refreshSavedGuestLists(showMessage = true) {
+async function loadSavedGuestLists(showMessage = true) {
     try {
         const payload = await apiRequest("/api/guest-lists");
         savedGuestListsCache = payload.items || [];
@@ -1504,11 +1599,17 @@ async function refreshSavedGuestLists(showMessage = true) {
 
 async function saveGuestListToServer() {
     const data = getGuestListData();
+    const saveName = getGuestListSaveName(data);
+    const normalizedName = saveName.trim().toLowerCase();
+    if (savedGuestListsCache.some(item => String(item.name || "").trim().toLowerCase() === normalizedName)) {
+        showStatusDialog("A guest list with this name is already saved.", "warning", "Duplicate name");
+        return;
+    }
     try {
         const payload = await apiRequest("/api/guest-lists", {
             method: "POST",
             body: JSON.stringify({
-                name: getGuestListSaveName(data),
+                name: saveName,
                 showName: data.showName,
                 date: data.date,
                 headliner: data.headliner,
@@ -1516,7 +1617,7 @@ async function saveGuestListToServer() {
             })
         });
         showStatusDialog("Guest list saved to MongoDB.", "success", "Saved");
-        await refreshSavedGuestLists(false);
+        await loadSavedGuestLists(false);
         const select = document.getElementById("savedGuestListsSelect");
         if (select && payload.item?._id) select.value = payload.item._id;
     } catch (err) {
@@ -1528,7 +1629,7 @@ async function loadSelectedGuestList() {
     const select = document.getElementById("savedGuestListsSelect");
     const id = select ? select.value : "";
     if (!id) {
-        showStatusDialog("Select a saved guest list first.", "warning", "Load DB");
+        showStatusDialog("Select a saved guest list first.", "warning", "Load");
         return;
     }
     try {
@@ -1645,6 +1746,13 @@ function exportPDF() {
     });
 
     doc.save(`${showCap}_${dateStr}.pdf`);
+}
+
+const savedGuestListsSelect = document.getElementById("savedGuestListsSelect");
+if (savedGuestListsSelect) {
+    savedGuestListsSelect.addEventListener("change", function () {
+        if (this.value) loadSelectedGuestList();
+    });
 }
 
 updatePreview();
