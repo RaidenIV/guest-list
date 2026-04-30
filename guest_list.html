@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <title>Guest List Generator</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="shortcut icon" type="image/png" href="favicon-32.png">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -710,35 +713,46 @@ body.dark .btn-save-db:hover { background: #f85149; border-color: #f85149; }
             <ul>
                 <li><strong>Headliner / Direct Support</strong> — artist guest lists</li>
                 <li><strong>XODIA</strong> — house / company guests</li>
-                <li><strong>Free Spots</strong> — comps, sponsors, etc.</li>
+                <li><strong>Free Spots</strong> — sponsors, comps, venue holds, or special approvals</li>
                 <li><strong>Promo Team</strong> — promotional staff</li>
             </ul>
         </div>
 
         <div class="guide-section">
             <h4>DJs</h4>
-            <p>Set how many DJs are performing. For each DJ, choose Solo / Duo / Trio and enter their stage name(s) and legal name(s). DJ blocks can be dragged to reorder them. Each DJ has their own guest list.</p>
+            <p>Set how many DJs are performing. For each DJ, choose Solo, Duo, or Trio, then enter stage name(s), legal name(s), and that DJ’s guest list. DJ blocks can be dragged to reorder them.</p>
         </div>
 
         <div class="guide-section">
             <h4>Other Sections</h4>
-            <p>Add any custom sections (e.g. VIP, Press, Venue Staff). Name the section and add guests one per line. Sections can be dragged to reorder.</p>
+            <p>Add custom sections such as VIP, Press, Venue Staff, Family, or Management. Name the section, add one guest per line, and drag sections to reorder them.</p>
         </div>
 
         <div class="guide-section">
             <h4>Preview</h4>
-            <p>The right panel shows a live scaled preview of the PDF output. If the list spans multiple pages, each page appears as a separate sheet. A warning appears if the PDF will be more than one page.</p>
+            <p>The right panel shows a live preview of the print-ready guest list. If the list spans multiple pages, each page appears as a separate sheet and a multi-page warning appears in the preview controls.</p>
         </div>
 
         <div class="guide-section">
             <h4>Buttons</h4>
             <ul>
-                <li><strong>Download PDF</strong> — download a print-ready PDF</li>
-                <li><strong>Copy</strong> — copy the full list as plain text</li>
-                <li><strong>Download CSV</strong> — save your work as a CSV file</li>
-                <li><strong>Load</strong> — load a previously saved CSV or JSON file</li>
-                <li><strong>Reset</strong> — clear all fields (asks for confirmation)</li>
+                <li><strong>Download PDF</strong> — download the print-ready guest list PDF</li>
+                <li><strong>Copy</strong> — copy the full guest list as plain text; the button changes to “Copied!” after a successful copy</li>
+                <li><strong>Download CSV</strong> — download the current guest list as a local CSV file</li>
+                <li><strong>Load</strong> — load a saved CSV or legacy JSON file from your computer</li>
+                <li><strong>Save</strong> — save the current guest list to MongoDB; duplicate saved-list names are blocked</li>
+                <li><strong>Reset</strong> — clear the page immediately</li>
             </ul>
+        </div>
+
+        <div class="guide-section">
+            <h4>Saved Guest Lists</h4>
+            <p>When the backend is connected, the saved guest list dropdown fills with MongoDB records. Selecting a guest list automatically loads it into the generator.</p>
+        </div>
+
+        <div class="guide-section">
+            <h4>Status Messages</h4>
+            <p>The status indicator reports server connection, save success, load success, duplicate-name warnings, and backend errors without interrupting your workflow.</p>
         </div>
 
         <div class="guide-section">
@@ -852,7 +866,7 @@ body.dark .btn-save-db:hover { background: #f85149; border-color: #f85149; }
         <div class="preview-header">
             <h2>Preview</h2>
             <button class="btn-primary" onclick="exportPDF()">Download PDF</button>
-            <button class="btn-secondary" onclick="copyPreview()">Copy</button>
+            <button id="copyPreviewBtn" class="btn-secondary" onclick="copyPreview()">Copy</button>
             <button class="btn-secondary" onclick="exportCSV()">Download CSV</button>
             <button class="btn-secondary" onclick="importCSV()">Load</button>
             <select id="savedGuestListsSelect" class="backend-select" aria-label="Saved guest lists">
@@ -1295,6 +1309,18 @@ function updatePreview() {
     pageWarning.classList.toggle("visible", pages.length > 1);
 }
 
+function setCopyButtonState(text) {
+    const btn = document.getElementById("copyPreviewBtn");
+    if (!btn) return;
+    const original = btn.dataset.originalText || btn.textContent;
+    btn.dataset.originalText = original;
+    btn.textContent = text;
+    clearTimeout(btn._copyStateTimer);
+    btn._copyStateTimer = setTimeout(() => {
+        btn.textContent = btn.dataset.originalText || "Copy";
+    }, 1800);
+}
+
 function copyPreview() {
     const showCap = getShowNameCap();
     const dateStr = dateFormat(date.value);
@@ -1315,23 +1341,30 @@ function copyPreview() {
         lines.push("");
     });
     const text = lines.join("\n");
+    if (!text.trim()) return;
     if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(() => alert("Copied!")).catch(() => fallbackCopy(text));
-    } else { fallbackCopy(text); }
+        navigator.clipboard.writeText(text).then(() => {
+            setCopyButtonState("Copied!");
+        }).catch(() => fallbackCopy(text));
+    } else {
+        fallbackCopy(text);
+    }
 }
 
 function fallbackCopy(text) {
     const temp = document.createElement("textarea");
     temp.value = text;
+    temp.setAttribute("readonly", "");
+    temp.style.position = "fixed";
+    temp.style.left = "-9999px";
     document.body.appendChild(temp);
     temp.select();
-    document.execCommand("copy");
+    const copied = document.execCommand("copy");
     document.body.removeChild(temp);
-    alert("Copied!");
+    if (copied) setCopyButtonState("Copied!");
 }
 
 function resetAll() {
-    if (!confirm("Reset all fields?")) return;
     showName.value = ""; headliner.value = ""; directSupport.value = "";
     date.value = ""; dayOfShowPricing.value = "";
     headlinerGuests.value = ""; directSupportGuests.value = "";
