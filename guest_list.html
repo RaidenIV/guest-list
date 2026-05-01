@@ -941,6 +941,21 @@ function getShowNameCap() { return showName.value.trim().toUpperCase(); }
 function getHeadlinerCap() { return headliner.value.trim().toUpperCase(); }
 function getDirectSupportCap() { return directSupport.value.trim().toUpperCase(); }
 
+function getGuestEntryCount(name) {
+    const cleanName = String(name || "")
+        .replace(/<[^>]*>/g, "")
+        .replace(/\s*\(DUPLICATE!\)\s*$/i, "")
+        .trim();
+    const plusMatch = cleanName.match(/(?:^|\s)\(?\+\s*(\d+)\)?\s*$/);
+    if (!plusMatch) return cleanName ? 1 : 0;
+    const extraGuests = Number(plusMatch[1]);
+    return Number.isFinite(extraGuests) && extraGuests > 0 ? 1 + extraGuests : 1;
+}
+
+function getGuestListCount(list) {
+    return (list || []).reduce((sum, name) => sum + getGuestEntryCount(name), 0);
+}
+
 function cleanList(text, globalSeen) {
     const seen = globalSeen || new Set();
     return text
@@ -989,7 +1004,7 @@ function getSectionsForLayout() {
         if (title === "Headliner") title = headlinerName;
         if (title === "Direct Support") title = directSupportName;
         sections.push({ title, list });
-        totalNames += list.length;
+        totalNames += getGuestListCount(list);
     }
 
     addSection("Headliner", headlinerGuests.value);
@@ -1674,6 +1689,20 @@ async function loadSelectedGuestList() {
     }
 }
 
+function hasDraggedFiles(e) {
+    const types = e?.dataTransfer?.types;
+    if (!types) return false;
+    if (typeof types.includes === "function") return types.includes("Files");
+    if (typeof types.contains === "function") return types.contains("Files");
+    return Array.from(types).includes("Files");
+}
+
+function getFirstDroppedFile(e) {
+    const items = Array.from(e?.dataTransfer?.items || []);
+    const fileItem = items.find(item => item.kind === "file");
+    return fileItem?.getAsFile?.() || e?.dataTransfer?.files?.[0] || null;
+}
+
 function enablePanelDrop(panelEl) {
     if (!panelEl) return;
     let dragDepth = 0;
@@ -1682,28 +1711,46 @@ function enablePanelDrop(panelEl) {
         else panelEl.classList.remove("dragover");
     }
     panelEl.addEventListener("dragenter", e => {
-        if (!e.dataTransfer?.types?.includes("Files")) return;
-        e.preventDefault(); dragDepth++; setOver(true);
+        if (!hasDraggedFiles(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragDepth++;
+        setOver(true);
     });
     panelEl.addEventListener("dragover", e => {
-        if (!e.dataTransfer?.types?.includes("Files")) return;
-        e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setOver(true);
+        if (!hasDraggedFiles(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "copy";
+        setOver(true);
     });
     panelEl.addEventListener("dragleave", e => {
-        if (!e.dataTransfer?.types?.includes("Files")) return;
+        if (!hasDraggedFiles(e)) return;
         dragDepth = Math.max(0, dragDepth - 1);
         if (dragDepth === 0) setOver(false);
     });
     panelEl.addEventListener("drop", e => {
-        e.preventDefault(); dragDepth = 0; setOver(false);
-        const files = e.dataTransfer?.files;
-        if (!files?.length) return;
-        importFromFile(files[0]);
+        if (!hasDraggedFiles(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragDepth = 0;
+        setOver(false);
+        const file = getFirstDroppedFile(e);
+        if (!file) return;
+        importFromFile(file);
+    });
+    window.addEventListener("dragend", () => {
+        dragDepth = 0;
+        setOver(false);
     });
 }
 
-window.addEventListener("dragover", e => { if (e.dataTransfer?.types?.includes("Files")) e.preventDefault(); });
-window.addEventListener("drop", e => { if (e.dataTransfer?.files?.length) e.preventDefault(); });
+window.addEventListener("dragover", e => {
+    if (hasDraggedFiles(e)) e.preventDefault();
+});
+window.addEventListener("drop", e => {
+    if (hasDraggedFiles(e)) e.preventDefault();
+});
 enablePanelDrop(document.getElementById("dropZone"));
 
 function exportPDF() {
