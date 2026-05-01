@@ -946,8 +946,11 @@ function getGuestEntryCount(name) {
         .replace(/<[^>]*>/g, "")
         .replace(/\s*\(DUPLICATE!\)\s*$/i, "")
         .trim();
-    const plusMatch = cleanName.match(/(?:^|\s)\(?\+\s*(\d+)\)?\s*$/);
-    if (!plusMatch) return cleanName ? 1 : 0;
+    if (!cleanName) return 0;
+
+    const plusMatch = cleanName.match(/\(?\+\s*(\d+)\)?\s*$/);
+    if (!plusMatch) return 1;
+
     const extraGuests = Number(plusMatch[1]);
     return Number.isFinite(extraGuests) && extraGuests > 0 ? 1 + extraGuests : 1;
 }
