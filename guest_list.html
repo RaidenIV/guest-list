@@ -1598,12 +1598,31 @@ function showStatusDialog(message, type = "info", title = "Status", timeout = 28
     }
 }
 
-async function apiRequest(path, options = {}) {
-    const res = await fetch(`${API_BASE}${path}`, {
-        headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-        ...options
-    });
+const ACCESS_TOKEN_KEY = "guest_list_admin_token";
+
+function getAccessToken() {
+    return localStorage.getItem(ACCESS_TOKEN_KEY) || "";
+}
+
+function promptForAccessToken() {
+    const value = window.prompt("Enter the admin access token for saved guest lists:");
+    if (value && value.trim()) {
+        localStorage.setItem(ACCESS_TOKEN_KEY, value.trim());
+        return true;
+    }
+    return false;
+}
+
+async function apiRequest(path, options = {}, isRetry = false) {
+    const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+    const token = getAccessToken();
+    if (token) headers["X-Admin-Token"] = token;
+    const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
     const payload = await res.json().catch(() => ({}));
+    if (res.status === 401 && !isRetry) {
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
+        if (promptForAccessToken()) return apiRequest(path, options, true);
+    }
     if (!res.ok) throw new Error(payload.error || `Request failed (${res.status})`);
     return payload;
 }

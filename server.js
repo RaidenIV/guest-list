@@ -25,10 +25,27 @@ app.use((req, res, next) => {
   }
   res.header('Vary', 'Origin');
   res.header('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Token, Authorization');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
+
+// --- Access token gate (same pattern as ROLODEX / DJ Database) ---
+// Set ADMIN_TOKEN in Railway to lock the API. If unset, requests pass
+// through (not recommended in production).
+function requireAccess(req, res, next) {
+  const expectedToken = String(process.env.ADMIN_TOKEN || '').trim();
+  if (!expectedToken) return next();
+
+  const authHeader = String(req.headers.authorization || '');
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  const headerToken = String(req.headers['x-admin-token'] || '').trim();
+  const suppliedToken = headerToken || bearerToken;
+
+  if (suppliedToken && suppliedToken === expectedToken) return next();
+
+  return res.status(401).json({ error: 'Access token required', tokenRequired: true });
+}
 
 async function getCollection() {
   if (!mongoUri) throw new Error('MONGODB_URI is not configured.');
@@ -58,11 +75,20 @@ function normalizeName(value) {
 app.get('/api/health', async (req, res) => {
   try {
     await getCollection();
-    res.json({ ok: true, connected: true, dbName, collectionName });
+    res.json({
+      ok: true,
+      connected: true,
+      dbName,
+      collectionName,
+      tokenRequired: Boolean(String(process.env.ADMIN_TOKEN || '').trim())
+    });
   } catch (err) {
     res.status(500).json({ ok: false, connected: false, error: err.message });
   }
 });
+
+// Everything below requires the access token.
+app.use('/api/guest-lists', requireAccess);
 
 app.get('/api/guest-lists', async (req, res) => {
   try {
@@ -132,8 +158,3 @@ app.use(express.static(__dirname));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'guest_list.html')));
 
 app.listen(port, () => console.log(`Guest List Generator running on port ${port}`));
-
-process.on('SIGINT', async () => {
-  if (client) await client.close();
-  process.exit(0);
-});
