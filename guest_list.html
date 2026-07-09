@@ -117,12 +117,9 @@ body.dark .nav-menu a:hover { color: #58a6ff; }
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
 }
-.header img {
-    height: 66px;
-    width: auto;
-    justify-self: start;
-}
 .header h1 {
+    grid-column: 2;
+    grid-row: 1;
     font-family: 'IBM Plex Mono', monospace;
     font-size: 48px;
     font-weight: 700;
@@ -131,10 +128,17 @@ body.dark .nav-menu a:hover { color: #58a6ff; }
     text-align: center;
 }
 .header-spacer {
+    grid-column: 3;
+    grid-row: 1;
     justify-self: end;
     display: flex;
     align-items: center;
     gap: 8px;
+}
+.header-logo {
+    height: 66px;
+    width: auto;
+    margin-left: 12px;
 }
 
 /* ── ICON BUTTONS (help + dark mode) ──────────────────────── */
@@ -653,9 +657,17 @@ body.dark .btn-save-db:hover { background: #f85149; border-color: #f85149; }
         gap: 10px;
         text-align: center;
     }
-    .header img { justify-self: center; height: 52px; }
-    .header h1 { font-size: clamp(26px, 8vw, 38px); }
-    .header-spacer { justify-self: center; }
+    .header h1 {
+        grid-column: 1;
+        grid-row: auto;
+        font-size: clamp(26px, 8vw, 38px);
+    }
+    .header-spacer {
+        grid-column: 1;
+        grid-row: auto;
+        justify-self: center;
+    }
+    .header-logo { height: 52px; margin-left: 8px; }
     .left-grid { grid-template-columns: 1fr; }
     .left-col { border-right: none; border-bottom: 1px solid #f0f0f0; }
     .row { grid-template-columns: 1fr; }
@@ -688,11 +700,11 @@ body.dark .btn-save-db:hover { background: #f85149; border-color: #f85149; }
 </div>
 
 <header class="header">
-    <img id="headerLogo" src="https://images.squarespace-cdn.com/content/v1/681ea18dd168a935c26295bd/7803d573-dd87-40ed-9570-0bc7c5ed8915/xodia_logo_black.png?format=750w" alt="XODIA Logo">
     <h1>Guest List Generator</h1>
     <div class="header-spacer">
         <button class="btn-icon" onclick="toggleDark()" id="darkBtn" title="Toggle dark mode">🌙</button>
         <button class="btn-icon" onclick="openHelp()" title="How to use">?</button>
+        <img class="header-logo" id="headerLogo" src="https://images.squarespace-cdn.com/content/v1/681ea18dd168a935c26295bd/7803d573-dd87-40ed-9570-0bc7c5ed8915/xodia_logo_black.png?format=750w" alt="XODIA Logo">
     </div>
 </header>
 
